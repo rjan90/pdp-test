@@ -6,7 +6,7 @@ A minimal automated release system that watches for changes to the VERSION const
 
 ### When You Update the Version
 
-1. **Edit the VERSION constant** in [`src/PDPVerifier.sol`](https://github.com/FilOzone/pdp/blob/4214bd2e6ab997bb2d05208cd9f52c79e0d58cdf/src/PDPVerifier.sol#L158-L159):
+1. **Edit the VERSION constant** in `src/PDPVerifier.sol`:
    ```solidity
    string public constant VERSION = "2.1.0";  // Update this line
    ```
@@ -46,6 +46,12 @@ string public constant VERSION = "2.1.0-rc.1";
 ## Workflow File
 
 - **`.github/workflows/version-release.yml`** - Single workflow that handles everything
+
+## Requirements
+
+- The workflow requires `contents: write` and `pull-requests: write` permissions
+- Only triggers on PRs targeting the `main` branch
+- Only runs when `src/PDPVerifier.sol` is modified
 
 ## Manual Steps
 
