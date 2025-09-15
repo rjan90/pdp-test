@@ -208,11 +208,25 @@ jobs:
         if: steps.version_check.outputs.changed == 'true'
         run: |
           if [ "${{ steps.release_check.outputs.exists }}" == "false" ]; then
-            COMMENT="Version Update Detected\n\nVersion changed: ${{ steps.previous_version.outputs.version }} -> ${{ steps.current_version.outputs.version }}\n\nCreated draft release: https://github.com/${{ github.repository }}/releases/tag/v${{ steps.current_version.outputs.version }}\n\nThe draft release includes the changelog and is ready for review."
-            gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "$COMMENT"
+            cat > /tmp/pr_comment.md << 'EOF'
+🚀 **Version Update Detected!**
+
+Version changed: **${{ steps.previous_version.outputs.version }}** → **${{ steps.current_version.outputs.version }}**
+
+✅ **Created draft release:** [v${{ steps.current_version.outputs.version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.current_version.outputs.version }})
+
+The draft release includes the changelog and is ready for review. Publish it when ready to deploy version ${{ steps.current_version.outputs.version }}.
+EOF
+            gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body-file /tmp/pr_comment.md
           else
-            COMMENT="Version Update Detected\n\nVersion changed: ${{ steps.previous_version.outputs.version }} -> ${{ steps.current_version.outputs.version }}\n\nRelease v${{ steps.current_version.outputs.version }} already exists: https://github.com/${{ github.repository }}/releases/tag/v${{ steps.current_version.outputs.version }}"
-            gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "$COMMENT"
+            cat > /tmp/pr_comment.md << 'EOF'
+🔄 **Version Update Detected!**
+
+Version changed: **${{ steps.previous_version.outputs.version }}** → **${{ steps.current_version.outputs.version }}**
+
+ℹ️ **Release already exists:** [v${{ steps.current_version.outputs.version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.current_version.outputs.version }})
+EOF
+            gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body-file /tmp/pr_comment.md
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
