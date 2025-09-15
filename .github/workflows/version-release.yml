@@ -170,20 +170,24 @@ jobs:
       - name: Add comment to PR
         if: steps.version_check.outputs.changed == 'true'
         run: |
+          REPO="${{ github.repository }}"
+          CURRENT_VERSION="${{ steps.current_version.outputs.version }}"
+          PREVIOUS_VERSION="${{ steps.previous_version.outputs.version }}"
+          
           if [ "${{ steps.release_check.outputs.exists }}" == "false" ]; then
             COMMENT="🚀 **Version Update Detected!**
 
-Version changed: \`${{ steps.previous_version.outputs.version }}\` → \`${{ steps.current_version.outputs.version }}\`
+Version changed: \`${PREVIOUS_VERSION}\` → \`${CURRENT_VERSION}\`
 
-✅ Created draft release: [v${{ steps.current_version.outputs.version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.current_version.outputs.version }})
+✅ Created draft release: [v${CURRENT_VERSION}](https://github.com/${REPO}/releases/tag/v${CURRENT_VERSION})
 
-The draft release includes the changelog and is ready for review. Publish it when ready to deploy version ${{ steps.current_version.outputs.version }}."
+The draft release includes the changelog and is ready for review. Publish it when ready to deploy version ${CURRENT_VERSION}."
           else
             COMMENT="🔄 **Version Update Detected!**
 
-Version changed: \`${{ steps.previous_version.outputs.version }}\` → \`${{ steps.current_version.outputs.version }}\`
+Version changed: \`${PREVIOUS_VERSION}\` → \`${CURRENT_VERSION}\`
 
-ℹ️ Release [v${{ steps.current_version.outputs.version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.current_version.outputs.version }}) already exists."
+ℹ️ Release [v${CURRENT_VERSION}](https://github.com/${REPO}/releases/tag/v${CURRENT_VERSION}) already exists."
           fi
           
           gh pr comment ${{ github.event.pull_request.number }} --body "$COMMENT"
