@@ -1,5 +1,14 @@
 name: Auto Release on Version Change
 
+# Automatically creates draft releases when the VERSION constant in PDPVerifier.sol changes
+# This workflow:
+# - Detects version changes in pull requests targeting main
+# - Generates comprehensive changelog from git history since last release
+# - Creates a draft release with detailed commit history and file changes
+# - Posts a notification comment on the PR
+# 
+# The draft release can then be reviewed, edited, and published manually
+
 on:
   pull_request:
     branches: ["main"]
@@ -19,15 +28,6 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-
-      - name: Fetch upstream tags
-        run: |
-          # Add upstream remote if it doesn't exist
-          git remote add upstream https://github.com/FilOzone/pdp.git 2>/dev/null || true
-          # Fetch tags from upstream
-          git fetch upstream --tags
-          echo "Tags after fetching from upstream:"
-          git tag -l "v*" --sort=-version:refname
 
       - name: Get current VERSION from PDPVerifier.sol
         id: current_version
