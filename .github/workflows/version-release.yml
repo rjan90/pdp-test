@@ -64,14 +64,6 @@ jobs:
         run: |
           CURRENT_VERSION="${{ steps.current_version.outputs.version }}"
           
-          # Debug: List all tags
-          echo "DEBUG: All tags found:"
-          git tag -l | sort
-          echo "DEBUG: Version-sorted tags:"
-          git tag -l "v*" --sort=-version:refname
-          echo "DEBUG: After filtering out v${CURRENT_VERSION}:"
-          git tag -l "v*" --sort=-version:refname | grep -v "v${CURRENT_VERSION}"
-          
           # Find the previous release tag (exclude the current version if it exists)
           PREVIOUS_TAG=$(git tag -l "v*" --sort=-version:refname | grep -v "v${CURRENT_VERSION}" | head -n 1)
           
@@ -89,28 +81,29 @@ jobs:
             
             if [ "$COMMIT_COUNT" -gt 0 ]; then
               # Generate changelog from commit messages
-              echo "## Changes Since $PREVIOUS_TAG" > /tmp/release_notes.txt
-              echo "" >> /tmp/release_notes.txt
-              echo "### Commits - $COMMIT_COUNT total" >> /tmp/release_notes.txt
-              echo "" >> /tmp/release_notes.txt
-              
-              # Add commit messages with better formatting
-              git log --pretty=format:"- %s (%h)" --reverse $COMMIT_RANGE >> /tmp/release_notes.txt
-              
-              # Add file changes summary
-              echo "" >> /tmp/release_notes.txt
-              echo "### Files Changed" >> /tmp/release_notes.txt
-              echo "" >> /tmp/release_notes.txt
-              CHANGED_FILES=$(git diff --name-only $COMMIT_RANGE | wc -l)
-              echo "$CHANGED_FILES files changed:" >> /tmp/release_notes.txt
-              echo "" >> /tmp/release_notes.txt
-              git diff --name-only $COMMIT_RANGE | sed 's/^/- /' >> /tmp/release_notes.txt
-              
-              # Add diff stats
-              echo "" >> /tmp/release_notes.txt
-              echo "### Diff Summary" >> /tmp/release_notes.txt
-              echo "" >> /tmp/release_notes.txt
-              git diff --stat $COMMIT_RANGE | tail -n 1 | sed 's/^/- /' >> /tmp/release_notes.txt
+              {
+                echo "## Changes Since $PREVIOUS_TAG"
+                echo ""
+                echo "### Commits - $COMMIT_COUNT total"
+                echo ""
+                
+                # Add commit messages with better formatting (escape special characters)
+                git log --pretty=format:"- %s (%h)" --reverse "$COMMIT_RANGE" | sed 's/`/\\`/g; s/\$/\\$/g'
+                
+                echo ""
+                echo ""
+                echo "### Files Changed"
+                echo ""
+                CHANGED_FILES=$(git diff --name-only "$COMMIT_RANGE" | wc -l)
+                echo "$CHANGED_FILES files changed:"
+                echo ""
+                git diff --name-only "$COMMIT_RANGE" | sed 's/^/- /'
+                
+                echo ""
+                echo "### Diff Summary"
+                echo ""
+                git diff --stat "$COMMIT_RANGE" | tail -n 1 | sed 's/^/- /'
+              } > /tmp/release_notes.txt
               
               echo "changelog_found=true" >> $GITHUB_OUTPUT
             else
