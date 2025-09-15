@@ -55,6 +55,14 @@ jobs:
         run: |
           CURRENT_VERSION="${{ steps.current_version.outputs.version }}"
           
+          # Debug: List all tags
+          echo "DEBUG: All tags found:"
+          git tag -l | sort
+          echo "DEBUG: Version-sorted tags:"
+          git tag -l "v*" --sort=-version:refname
+          echo "DEBUG: After filtering out v${CURRENT_VERSION}:"
+          git tag -l "v*" --sort=-version:refname | grep -v "v${CURRENT_VERSION}"
+          
           # Find the previous release tag (exclude the current version if it exists)
           PREVIOUS_TAG=$(git tag -l "v*" --sort=-version:refname | grep -v "v${CURRENT_VERSION}" | head -n 1)
           
