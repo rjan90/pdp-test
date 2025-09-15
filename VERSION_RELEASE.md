@@ -64,3 +64,4 @@ string public constant VERSION = "2.1.0-rc.1";
 
 Simple, incremental, and focused on the core need: automatically creating draft releases when the contract version changes. 🚀
 
+# Test trigger
