@@ -1,5 +1,14 @@
 name: Auto Release on Version Change
 
+# Automatically creates draft releases when the VERSION constant in PDPVerifier.sol changes
+# This workflow:
+# - Detects version changes in pull requests targeting main
+# - Generates comprehensive changelog from git history since last release
+# - Creates a draft release with detailed commit history and file changes
+# - Posts a notification comment on the PR
+# 
+# The draft release can then be reviewed, edited, and published manually
+
 on:
   pull_request:
     branches: ["main"]
@@ -11,13 +20,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: read
+      pull-requests: write
       
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Get current VERSION from PDPVerifier.sol
         id: current_version
@@ -52,43 +62,69 @@ jobs:
         if: steps.version_check.outputs.changed == 'true'
         id: changelog
         run: |
-          # Find the previous release tag
-          PREVIOUS_TAG=$(git tag -l "v*" --sort=-version:refname | head -n 1)
+          CURRENT_VERSION="${{ steps.current_version.outputs.version }}"
+          
+          # Find the previous release tag (exclude the current version if it exists)
+          PREVIOUS_TAG=$(git tag -l "v*" --sort=-version:refname | grep -v "v${CURRENT_VERSION}" | head -n 1)
           
           if [ -n "$PREVIOUS_TAG" ]; then
             echo "Found previous tag: $PREVIOUS_TAG"
+            echo "Current version: v${CURRENT_VERSION}"
             
             # Get commit messages between previous tag and current HEAD
             COMMIT_RANGE="$PREVIOUS_TAG..HEAD"
             echo "Extracting changes from: $COMMIT_RANGE"
             
-            # Generate changelog from commit messages
-            cat > /tmp/release_notes.txt << EOF
-          ## Changes Since $PREVIOUS_TAG
-          
-          EOF
+            # Count commits in range
+            COMMIT_COUNT=$(git rev-list --count $COMMIT_RANGE)
+            echo "Found $COMMIT_COUNT commits since $PREVIOUS_TAG"
             
-            # Add commit messages with better formatting
-            git log --pretty=format:"- %s" --reverse $COMMIT_RANGE >> /tmp/release_notes.txt
-            
-            # Add file changes summary
-            echo -e "\n\n## Files Changed\n" >> /tmp/release_notes.txt
-            git diff --name-only $COMMIT_RANGE | sed 's/^/- /' >> /tmp/release_notes.txt
-            
-            echo "changelog_found=true" >> $GITHUB_OUTPUT
+            if [ "$COMMIT_COUNT" -gt 0 ]; then
+              # Generate changelog from commit messages
+              {
+                echo "## Changes Since $PREVIOUS_TAG"
+                echo ""
+                echo "### Commits - $COMMIT_COUNT total"
+                echo ""
+                
+                # Add commit messages with better formatting (escape special characters)
+                git log --pretty=format:"- %s (%h)" --reverse "$COMMIT_RANGE" | sed 's/`/\\`/g; s/\$/\\$/g'
+                
+                echo ""
+                echo ""
+                echo "### Files Changed"
+                echo ""
+                CHANGED_FILES=$(git diff --name-only "$COMMIT_RANGE" | wc -l)
+                echo "$CHANGED_FILES files changed:"
+                echo ""
+                git diff --name-only "$COMMIT_RANGE" | sed 's/^/- /'
+                
+                echo ""
+                echo "### Diff Summary"
+                echo ""
+                git diff --stat "$COMMIT_RANGE" | tail -n 1 | sed 's/^/- /'
+              } > /tmp/release_notes.txt
+              
+              echo "changelog_found=true" >> $GITHUB_OUTPUT
+            else
+              echo "No commits found between $PREVIOUS_TAG and HEAD"
+              echo "## Release v${CURRENT_VERSION}" > /tmp/release_notes.txt
+              echo "" >> /tmp/release_notes.txt
+              echo "No new commits since $PREVIOUS_TAG. This may be a version bump or re-release." >> /tmp/release_notes.txt
+              echo "changelog_found=false" >> $GITHUB_OUTPUT
+            fi
           else
-            echo "No previous release tag found - this might be the first release"
+            echo "No previous release tag found - this is the first release"
             
-            cat > /tmp/release_notes.txt << EOF
-          ## First Release
-          
-          This is the initial release of PDP v${{ steps.current_version.outputs.version }}.
-          
-          ## All Files
-          EOF
+            echo "## First Release" > /tmp/release_notes.txt
+            echo "" >> /tmp/release_notes.txt
+            echo "This is the initial release of PDP v${CURRENT_VERSION}." >> /tmp/release_notes.txt
+            echo "" >> /tmp/release_notes.txt
+            echo "### Contract Files" >> /tmp/release_notes.txt
+            echo "" >> /tmp/release_notes.txt
             
             # Show main contract files for first release
-            ls -la src/*.sol | sed 's/^/- /' >> /tmp/release_notes.txt
+            ls -la src/*.sol | awk '{print "- " $9 " (" $5 " bytes)"}' >> /tmp/release_notes.txt
             
             echo "changelog_found=false" >> $GITHUB_OUTPUT
           fi
@@ -116,7 +152,7 @@ jobs:
         id: release_check
         run: |
           TAG="v${{ steps.current_version.outputs.version }}"
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          if gh release view "$TAG" --repo ${{ github.repository }} >/dev/null 2>&1; then
             echo "Release $TAG already exists"
             echo "exists=true" >> $GITHUB_OUTPUT
           else
@@ -158,6 +194,7 @@ jobs:
           
           # Create draft release
           gh release create "$TAG" \
+            --repo ${{ github.repository }} \
             --draft \
             --title "$TITLE" \
             --notes-file /tmp/release_body.md \
@@ -171,22 +208,26 @@ jobs:
         if: steps.version_check.outputs.changed == 'true'
         run: |
           if [ "${{ steps.release_check.outputs.exists }}" == "false" ]; then
-            COMMENT="🚀 **Version Update Detected!**
+            cat > /tmp/pr_comment.md << 'EOF'
+🚀 **Version Update Detected!**
 
-Version changed: \`${{ steps.previous_version.outputs.version }}\` → \`${{ steps.current_version.outputs.version }}\`
+Version changed: **${{ steps.previous_version.outputs.version }}** → **${{ steps.current_version.outputs.version }}**
 
-✅ Created draft release: [v${{ steps.current_version.outputs.version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.current_version.outputs.version }})
+✅ **Created draft release:** [v${{ steps.current_version.outputs.version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.current_version.outputs.version }})
 
-The draft release includes the changelog and is ready for review. Publish it when ready to deploy version ${{ steps.current_version.outputs.version }}."
+The draft release includes the changelog and is ready for review. Publish it when ready to deploy version ${{ steps.current_version.outputs.version }}.
+EOF
+            gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body-file /tmp/pr_comment.md
           else
-            COMMENT="🔄 **Version Update Detected!**
+            cat > /tmp/pr_comment.md << 'EOF'
+🔄 **Version Update Detected!**
 
-Version changed: \`${{ steps.previous_version.outputs.version }}\` → \`${{ steps.current_version.outputs.version }}\`
+Version changed: **${{ steps.previous_version.outputs.version }}** → **${{ steps.current_version.outputs.version }}**
 
-ℹ️ Release [v${{ steps.current_version.outputs.version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.current_version.outputs.version }}) already exists."
+ℹ️ **Release already exists:** [v${{ steps.current_version.outputs.version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.current_version.outputs.version }})
+EOF
+            gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body-file /tmp/pr_comment.md
           fi
-          
-          gh pr comment ${{ github.event.pull_request.number }} --body "$COMMENT"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
